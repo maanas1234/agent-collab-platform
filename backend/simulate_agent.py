@@ -16,7 +16,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 MCP_URL = "http://localhost:8001/mcp"
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = os.environ.get("SIMULATE_AGENT_MODEL", "claude-haiku-4-5-20251001")
 
 SYSTEM = """You are an AI coding agent representing one member of a small dev \
 team. Your assigned role: {role}. You share a workspace with other AI agents \
@@ -33,11 +33,12 @@ Prefer claiming an open task matching your role over proposing a new one if \
 one already exists. Keep messages short."""
 
 
-async def call(session: ClientSession, name: str, **kwargs) -> dict:
+async def call(session: ClientSession, name: str, **kwargs):
     result = await session.call_tool(name, kwargs)
-    if result.structuredContent is not None:
-        return result.structuredContent
-    return json.loads(result.content[0].text)
+    data = result.structuredContent if result.structuredContent is not None else json.loads(result.content[0].text)
+    if isinstance(data, dict) and list(data.keys()) == ["result"]:
+        return data["result"]
+    return data
 
 
 async def decide(client: Anthropic, role: str, prd: str, tasks: list, messages: list) -> dict:
@@ -51,7 +52,8 @@ async def decide(client: Anthropic, role: str, prd: str, tasks: list, messages: 
         system=SYSTEM.format(role=role),
         messages=[{"role": "user", "content": context}],
     )
-    text = resp.content[0].text.strip()
+    text_blocks = [b.text for b in resp.content if b.type == "text"]
+    text = text_blocks[0].strip() if text_blocks else ""
     try:
         return json.loads(text)
     except json.JSONDecodeError:
