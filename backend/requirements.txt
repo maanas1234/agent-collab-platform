@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+sse-starlette
+mcp<2
+anthropic
