@@ -11,12 +11,13 @@ import asyncio
 import json
 import os
 
-from anthropic import Anthropic
+from anthropic import AsyncAnthropic
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 MCP_URL = "http://localhost:8001/mcp"
 MODEL = os.environ.get("SIMULATE_AGENT_MODEL", "claude-haiku-4-5-20251001")
+TURN_PAUSE_SECONDS = float(os.environ.get("SIMULATE_AGENT_TURN_PAUSE", "0.4"))
 
 SYSTEM = """You are an AI coding agent representing one member of a small dev \
 team. Your assigned role: {role}. You share a workspace with other AI agents \
@@ -41,17 +42,33 @@ async def call(session: ClientSession, name: str, **kwargs):
     return data
 
 
-async def decide(client: Anthropic, role: str, prd: str, tasks: list, messages: list) -> dict:
+async def decide(client: AsyncAnthropic, role: str, prd: str, tasks: list, messages: list) -> dict:
     context = (
         f"PRD:\n{prd}\n\nTasks:\n{json.dumps(tasks, indent=2)}\n\n"
         f"Recent discussion:\n{json.dumps(messages[-10:], indent=2)}"
     )
-    resp = client.messages.create(
-        model=MODEL,
-        max_tokens=300,
-        system=SYSTEM.format(role=role),
-        messages=[{"role": "user", "content": context}],
-    )
+    # The local proxy occasionally drops the auth header under concurrent
+    # load (observed as "Could not resolve authentication method" even with
+    # a valid key) — retry a couple times instead of forcing agents to run
+    # one at a time just to dodge it.
+    resp = None
+    last_err = None
+    for attempt in range(3):
+        try:
+            resp = await client.messages.create(
+                model=MODEL,
+                max_tokens=300,
+                system=SYSTEM.format(role=role),
+                messages=[{"role": "user", "content": context}],
+            )
+            break
+        except Exception as e:
+            last_err = e
+            await asyncio.sleep(0.5 * (attempt + 1))
+    if resp is None:
+        print(f"  (decide failed after retries: {last_err})")
+        return {"action": "noop"}
+
     text_blocks = [b.text for b in resp.content if b.type == "text"]
     text = text_blocks[0].strip() if text_blocks else ""
     try:
@@ -61,7 +78,9 @@ async def decide(client: Anthropic, role: str, prd: str, tasks: list, messages: 
 
 
 async def main(role: str, name: str, turns: int) -> None:
-    client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+    # A stalled request with no timeout can hang a whole run indefinitely —
+    # fail fast so the retry loop in decide() actually gets a chance to run.
+    client = AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"), timeout=20.0)
 
     async with streamablehttp_client(MCP_URL) as (read, write, _):
         async with ClientSession(read, write) as session:
@@ -93,7 +112,7 @@ async def main(role: str, name: str, turns: int) -> None:
                         task_id=action["task_id"], status=action["status"],
                     )
 
-                await asyncio.sleep(2)
+                await asyncio.sleep(TURN_PAUSE_SECONDS)
 
 
 if __name__ == "__main__":

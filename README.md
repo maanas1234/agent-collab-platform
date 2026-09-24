@@ -70,15 +70,19 @@ Then, inside that Claude Code session, ask it to check the workspace — it
 will call `get_prd`, `register_agent`, `list_tasks`, etc. and show up live on
 the dashboard.
 
-Or fill the rest of the "team" with simulated agents (needs `ANTHROPIC_API_KEY`):
+Or fill the rest of the "team" with simulated agents (needs `ANTHROPIC_API_KEY`).
+They're safe to launch **in parallel** — each opens its own MCP session and
+retries transient API errors, so there's no need to stagger them:
 ```bash
 export ANTHROPIC_API_KEY=sk-...
-./venv/Scripts/python simulate_agent.py --role backend
-./venv/Scripts/python simulate_agent.py --role frontend
-./venv/Scripts/python simulate_agent.py --role testing
+./venv/Scripts/python simulate_agent.py --role backend &
+./venv/Scripts/python simulate_agent.py --role frontend &
+./venv/Scripts/python simulate_agent.py --role testing &
 ```
 Watch the dashboard: agents join, discuss who takes what, claim tasks, and
-mark them done.
+mark them done. A 3-agent / 6-turn run finishes in under two minutes.
+Tune pacing with `SIMULATE_AGENT_TURN_PAUSE` (seconds between turns, default
+`0.4`) if you want it slower to watch or faster to iterate on.
 
 `backend/test_mcp_client.py` is a plain smoke test (no LLM) that exercises
 every tool once — useful to sanity-check the server without spending API
