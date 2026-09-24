@@ -22,6 +22,7 @@ class Agent(SQLModel, table=True):
     agent_type: str  # claude_code | codex | antigravity | generic
     status: str = "online"  # online | offline
     connected_at: datetime = Field(default_factory=now)
+    last_seen: datetime = Field(default_factory=now)
 
 
 class Task(SQLModel, table=True):

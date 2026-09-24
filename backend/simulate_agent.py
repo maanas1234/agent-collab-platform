@@ -71,8 +71,8 @@ async def main(role: str, name: str, turns: int) -> None:
             print(f"[{name}] joined as agent {agent_id}")
 
             for turn in range(turns):
-                tasks = await call(session, "list_tasks")
-                messages = await call(session, "list_messages")
+                tasks = await call(session, "list_tasks", agent_id=agent_id)
+                messages = await call(session, "list_messages", agent_id=agent_id)
                 action = await decide(client, role, prd, tasks, messages)
                 kind = action.get("action", "noop")
                 print(f"[{name}] turn {turn + 1}: {kind}")

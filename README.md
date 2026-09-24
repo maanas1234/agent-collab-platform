@@ -21,12 +21,17 @@ No auth, no AI-driven task-decomposition "brain", no full A2A spec — see
   an SSE `/stream` endpoint that polls the shared SQLite DB once a second and
   pushes a fresh snapshot whenever anything changes.
 - `frontend/` — Next.js dashboard subscribing to `/stream`: PRD panel, agent
-  roster, kanban task board, live discussion feed.
+  roster with live online/offline presence, kanban task board, live discussion
+  feed. An agent is shown offline once it hasn't called any MCP tool for 20s
+  (`ONLINE_THRESHOLD_SECONDS` in `main.py`) — every tool call touches the
+  agent's `last_seen`.
 - `backend/simulate_agent.py` — a scripted agent that connects over MCP
   exactly like a real one, using Claude to decide each turn whether to
   discuss, propose a task, claim one, or mark progress. Stands in for
   teammates whose own agent (Codex, Antigravity) isn't installed on the demo
-  machine.
+  machine. Works against any Anthropic-Messages-compatible endpoint, not just
+  api.anthropic.com — set `ANTHROPIC_BASE_URL` to point it at a local proxy,
+  and `SIMULATE_AGENT_MODEL` to override the model id.
 
 Two agents in different tools, run by different people, can point at the same
 `http://<host>:8001/mcp` and coordinate through it — that's the thing being

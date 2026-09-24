@@ -3,6 +3,7 @@ endpoints plus an SSE stream that polls the shared SQLite DB (also written to
 by mcp_server.py) so the frontend updates live as agents act."""
 import asyncio
 import json
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,10 +18,22 @@ app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
+# An agent that hasn't called any MCP tool in this long is shown offline —
+# distinguishes a live teammate from one whose process already exited.
+ONLINE_THRESHOLD_SECONDS = 20
+
 
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+
+
+def _agent_dict(a: Agent) -> dict:
+    d = a.model_dump(mode="json")
+    last_seen = a.last_seen if a.last_seen.tzinfo else a.last_seen.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - last_seen).total_seconds()
+    d["status"] = "online" if age < ONLINE_THRESHOLD_SECONDS else "offline"
+    return d
 
 
 def _snapshot() -> dict:
@@ -35,7 +48,7 @@ def _snapshot() -> dict:
         ).all()
         return {
             "workspace": ws.model_dump(mode="json"),
-            "agents": [a.model_dump(mode="json") for a in agents],
+            "agents": [_agent_dict(a) for a in agents],
             "tasks": [t.model_dump(mode="json") for t in tasks],
             "messages": [m.model_dump(mode="json") for m in msgs],
         }

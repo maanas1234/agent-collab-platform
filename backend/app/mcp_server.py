@@ -12,7 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from sqlmodel import select
 
 from .db import get_session, init_db
-from .models import Agent, Message, Task, Workspace
+from .models import Agent, Message, Task, Workspace, now
 
 mcp = FastMCP("agent-collab-platform", host="0.0.0.0", port=8001, streamable_http_path="/mcp")
 
@@ -22,6 +22,18 @@ def _active_workspace(session) -> Workspace:
     if not ws:
         raise ValueError("No workspace yet — run seed_demo.py first")
     return ws
+
+
+def _touch(session, agent_id: Optional[int]) -> None:
+    """Record that an agent is still active — drives the online/offline dot
+    on the dashboard (see main.py's ONLINE_THRESHOLD_SECONDS)."""
+    if agent_id is None:
+        return
+    agent = session.get(Agent, agent_id)
+    if agent:
+        agent.last_seen = now()
+        session.add(agent)
+        session.commit()
 
 
 @mcp.tool()
@@ -47,20 +59,22 @@ def get_prd() -> str:
 
 
 @mcp.tool()
-def list_tasks() -> list[dict]:
+def list_tasks(agent_id: Optional[int] = None) -> list[dict]:
     """List every task on the shared board with its status and owner."""
     with get_session() as session:
         ws = _active_workspace(session)
+        _touch(session, agent_id)
         tasks = session.exec(select(Task).where(Task.workspace_id == ws.id)).all()
         return [t.model_dump() for t in tasks]
 
 
 @mcp.tool()
-def list_messages(limit: int = 50) -> list[dict]:
+def list_messages(limit: int = 50, agent_id: Optional[int] = None) -> list[dict]:
     """Read the recent discussion thread — use this to see what other agents
     have proposed before you propose or claim anything."""
     with get_session() as session:
         ws = _active_workspace(session)
+        _touch(session, agent_id)
         msgs = session.exec(
             select(Message).where(Message.workspace_id == ws.id).order_by(Message.id.desc()).limit(limit)
         ).all()
@@ -73,6 +87,7 @@ def post_message(agent_id: int, text: str) -> dict:
     or announce what you're doing."""
     with get_session() as session:
         ws = _active_workspace(session)
+        _touch(session, agent_id)
         session.add(Message(workspace_id=ws.id, agent_id=agent_id, body=text))
         session.commit()
         return {"ok": True}
@@ -84,6 +99,7 @@ def propose_task(agent_id: int, title: str, description: str = "", role: str = "
     discussion thread)."""
     with get_session() as session:
         ws = _active_workspace(session)
+        _touch(session, agent_id)
         task = Task(workspace_id=ws.id, title=title, description=description, role=role, created_by=agent_id)
         session.add(task)
         session.commit()
@@ -96,6 +112,7 @@ def claim_task(agent_id: int, task_id: int) -> dict:
     """Claim ownership of an open task. Fails if someone already claimed it —
     check list_tasks() first to avoid duplicate work."""
     with get_session() as session:
+        _touch(session, agent_id)
         task = session.get(Task, task_id)
         if not task:
             return {"ok": False, "error": "no such task"}
@@ -112,6 +129,7 @@ def claim_task(agent_id: int, task_id: int) -> dict:
 def update_task_status(agent_id: int, task_id: int, status: str) -> dict:
     """Update progress on a task you own. status: in_progress | done."""
     with get_session() as session:
+        _touch(session, agent_id)
         task = session.get(Task, task_id)
         if not task:
             return {"ok": False, "error": "no such task"}
