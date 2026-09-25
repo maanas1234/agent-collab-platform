@@ -75,6 +75,7 @@ export default function Dashboard() {
   const [state, setState] = useState<State>({ workspace: null, agents: [], tasks: [], messages: [] });
   const [connected, setConnected] = useState(false);
   const [prdOpen, setPrdOpen] = useState(true);
+  const [expandedAgent, setExpandedAgent] = useState<number | null>(null);
   const [, forceTick] = useState(0);
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -149,34 +150,66 @@ export default function Dashboard() {
         <section>
           <SectionHeading>Agents</SectionHeading>
           <ul className="space-y-2">
-            {state.agents
-              .slice()
-              .sort((a, b) => (a.status === b.status ? 0 : a.status === "online" ? -1 : 1))
-              .map((a) => (
-                <li
-                  key={a.id}
-                  className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm flex items-center gap-2.5"
-                >
-                  <div className="relative shrink-0">
-                    <div
-                      className={`h-7 w-7 rounded-full ${avatarColor(a.id)} flex items-center justify-center text-[11px] font-semibold text-white/90`}
+            {state.agents.map((a) => {
+                const isOpen = expandedAgent === a.id;
+                const ownedTasks = state.tasks.filter((t) => t.owner_agent_id === a.id);
+                const ownMessages = state.messages.filter((m) => m.agent_id === a.id).slice(-5).reverse();
+                return (
+                  <li key={a.id} className="rounded-lg border border-zinc-800 bg-zinc-900 overflow-hidden">
+                    <button
+                      onClick={() => setExpandedAgent(isOpen ? null : a.id)}
+                      className="w-full px-3 py-2 text-sm flex items-center gap-2.5 text-left hover:bg-zinc-800/60 transition-colors"
                     >
-                      {initials(a.display_name)}
-                    </div>
-                    <span
-                      className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-zinc-900 ${
-                        a.status === "online" ? "bg-emerald-400" : "bg-zinc-600"
-                      }`}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate">{a.display_name}</div>
-                    <div className="text-xs text-zinc-500">
-                      {a.agent_type} · {a.status === "online" ? "online" : `seen ${timeAgo(a.last_seen)}`}
-                    </div>
-                  </div>
-                </li>
-              ))}
+                      <div className="relative shrink-0">
+                        <div
+                          className={`h-7 w-7 rounded-full ${avatarColor(a.id)} flex items-center justify-center text-[11px] font-semibold text-white/90`}
+                        >
+                          {initials(a.display_name)}
+                        </div>
+                        <span
+                          className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-zinc-900 ${
+                            a.status === "online" ? "bg-emerald-400" : "bg-zinc-600"
+                          }`}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate">{a.display_name}</div>
+                        <div className="text-xs text-zinc-500">
+                          {a.agent_type} · {a.status === "online" ? "online" : `seen ${timeAgo(a.last_seen)}`}
+                        </div>
+                      </div>
+                      <span className="text-zinc-600 text-xs shrink-0">{isOpen ? "▲" : "▼"}</span>
+                    </button>
+                    {isOpen && (
+                      <div className="px-3 pb-3 pt-1 border-t border-zinc-800 text-xs space-y-2.5">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-zinc-600 mb-1">
+                            Working on ({ownedTasks.length})
+                          </div>
+                          {ownedTasks.length === 0 && <div className="text-zinc-600 italic">nothing claimed yet</div>}
+                          {ownedTasks.map((t) => (
+                            <div key={t.id} className="text-zinc-300 leading-snug py-0.5">
+                              <span className={`rounded px-1 py-0.5 text-[9px] font-medium mr-1.5 ${roleStyle(t.role)}`}>
+                                {t.status}
+                              </span>
+                              {t.title}
+                            </div>
+                          ))}
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase tracking-wide text-zinc-600 mb-1">Recent activity</div>
+                          {ownMessages.length === 0 && <div className="text-zinc-600 italic">no messages yet</div>}
+                          {ownMessages.map((m) => (
+                            <div key={m.id} className="text-zinc-400 leading-snug py-0.5">
+                              <span className="text-zinc-600">{clockTime(m.created_at)}</span> {m.body}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             {state.agents.length === 0 && <li className="text-sm text-zinc-600">none connected</li>}
           </ul>
         </section>
