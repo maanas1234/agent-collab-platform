@@ -49,7 +49,7 @@ def register_agent(display_name: str, agent_type: str = "generic") -> dict:
         session.refresh(agent)
         session.add(Message(workspace_id=ws.id, agent_id=None, body=f"{display_name} ({agent_type}) joined the workspace."))
         session.commit()
-        return {"agent_id": agent.id, "workspace_name": ws.name, "prd": ws.prd_text}
+        return {"agent_id": agent.id, "workspace_name": ws.name, "prd": ws.prd_text, "started": ws.started}
 
 
 @mcp.tool()
@@ -57,6 +57,16 @@ def get_prd() -> str:
     """Read the shared goal / Product Requirements Document for the active workspace."""
     with get_session() as session:
         return _active_workspace(session).prd_text
+
+
+@mcp.tool()
+def is_started(agent_id: Optional[int] = None) -> bool:
+    """Check whether a human has started the workspace yet. Agents should
+    register, then poll this and wait (don't propose/claim/write anything)
+    until it returns true — connecting isn't the same as being told to go."""
+    with get_session() as session:
+        _touch(session, agent_id)
+        return _active_workspace(session).started
 
 
 @mcp.tool()

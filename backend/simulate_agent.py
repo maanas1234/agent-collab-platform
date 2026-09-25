@@ -193,6 +193,12 @@ async def main(role: str, name: str, turns: int) -> None:
             agent_id, prd = joined["agent_id"], joined["prd"]
             print(f"[{name}] joined as agent {agent_id}")
 
+            if not joined.get("started"):
+                print(f"[{name}] waiting for workspace to start...")
+                while not await call(session, "is_started", agent_id=agent_id):
+                    await asyncio.sleep(1.5)
+                print(f"[{name}] workspace started — beginning work")
+
             for turn in range(turns):
                 tasks = await call(session, "list_tasks", agent_id=agent_id)
                 messages = await call(session, "list_messages", agent_id=agent_id)

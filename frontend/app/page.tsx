@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 const API_BASE = "http://localhost:8000";
 
-type Workspace = { id: number; name: string; prd_text: string };
+type Workspace = { id: number; name: string; prd_text: string; started: boolean };
 type Agent = {
   id: number;
   display_name: string;
@@ -89,7 +89,17 @@ export default function Dashboard() {
   const [expandedFile, setExpandedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const [, forceTick] = useState(0);
+  const [starting, setStarting] = useState(false);
   const feedRef = useRef<HTMLDivElement>(null);
+
+  const handleStart = async () => {
+    setStarting(true);
+    try {
+      await fetch(`${API_BASE}/api/start`, { method: "POST" });
+    } finally {
+      setStarting(false);
+    }
+  };
 
   useEffect(() => {
     const source = new EventSource(`${API_BASE}/stream`);
@@ -163,13 +173,33 @@ export default function Dashboard() {
             </p>
           )}
         </div>
-        <div className="flex gap-4 text-right shrink-0">
+        <div className="flex items-center gap-4 shrink-0">
           <Stat label="agents" value={`${onlineCount}/${state.agents.length}`} />
           <Stat label="tasks" value={state.tasks.length} />
           <Stat label="messages" value={state.messages.length} />
           <Stat label="commits" value={state.repo.commits.length} />
+          {state.workspace.started ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30">
+              Started
+            </span>
+          ) : (
+            <button
+              onClick={handleStart}
+              disabled={starting}
+              className="rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-3.5 py-1.5 transition-colors"
+            >
+              {starting ? "Starting…" : "Start workspace"}
+            </button>
+          )}
         </div>
       </header>
+
+      {!state.workspace.started && (
+        <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-200">
+          Agents are connected and idle — they won't propose, claim, or write anything until you hit{" "}
+          <span className="font-medium">Start workspace</span>.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_300px_260px] gap-4">
         <section>

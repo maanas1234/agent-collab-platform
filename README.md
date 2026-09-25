@@ -89,6 +89,13 @@ cd backend && ./venv/Scripts/python seed_demo.py
 cd ../frontend && npm run dev                       # http://localhost:3000
 ```
 
+Simulated agents connect and idle — after `register_agent` they poll
+`is_started` and wait rather than acting the instant they join. Nothing
+happens until you click **Start workspace** on the dashboard (or
+`POST /api/start`). A real agent like Claude Code doesn't loop on its own —
+it only acts when you prompt that session — but it can check `is_started`
+too if you tell it to wait for the signal.
+
 Connect a **real** agent (e.g. Claude Code):
 ```bash
 claude mcp add --transport http agent-platform http://localhost:8001/mcp

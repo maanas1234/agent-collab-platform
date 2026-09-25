@@ -74,6 +74,23 @@ def repo_file(path: str) -> dict:
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@app.post("/api/start")
+def start_workspace() -> dict:
+    """The human's go signal — agents connect and idle (see mcp_server.py's
+    is_started) until this is called. Idempotent: calling it again after the
+    workspace is already started is a no-op."""
+    with get_session() as session:
+        ws = session.exec(select(Workspace).order_by(Workspace.id.desc())).first()
+        if not ws:
+            raise HTTPException(status_code=404, detail="no workspace yet")
+        if not ws.started:
+            ws.started = True
+            session.add(ws)
+            session.add(Message(workspace_id=ws.id, agent_id=None, body="Workspace started — agents may begin work."))
+            session.commit()
+        return {"started": True}
+
+
 @app.get("/stream")
 async def stream():
     async def gen():

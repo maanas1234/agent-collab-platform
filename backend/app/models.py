@@ -12,6 +12,7 @@ class Workspace(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     prd_text: str
+    started: bool = False  # agents connect and idle until a human starts the workspace
     created_at: datetime = Field(default_factory=now)
 
 
