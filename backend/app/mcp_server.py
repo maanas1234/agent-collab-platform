@@ -11,6 +11,7 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from sqlmodel import select
 
+from . import repo
 from .db import get_session, init_db
 from .models import Agent, Message, Task, Workspace, now
 
@@ -141,6 +142,65 @@ def update_task_status(agent_id: int, task_id: int, status: str) -> dict:
         return {"ok": True}
 
 
+@mcp.tool()
+def write_file(agent_id: int, task_id: int, path: str, content: str, message: str = "") -> dict:
+    """Write a file into the shared project repo and commit it under your
+    name — this is the actual codebase the team is building, separate from
+    the task board. Fails if you don't own task_id, so ownership and code
+    stay tied together. Use list_repo_files/read_repo_file first to see
+    what teammates already wrote before you add or change something."""
+    with get_session() as session:
+        _touch(session, agent_id)
+        agent = session.get(Agent, agent_id)
+        task = session.get(Task, task_id)
+        if not agent:
+            return {"ok": False, "error": "no such agent"}
+        if not task:
+            return {"ok": False, "error": "no such task"}
+        if task.owner_agent_id != agent_id:
+            return {"ok": False, "error": "you do not own this task"}
+        try:
+            commit_msg = message or f"{path}: {task.title}"
+            commit_hash = repo.write_and_commit(path, content, agent.display_name, commit_msg)
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
+        session.add(Message(
+            workspace_id=task.workspace_id, agent_id=agent_id,
+            body=f"committed {path} ({commit_hash}) for task #{task_id}: {commit_msg}",
+        ))
+        session.commit()
+        return {"ok": True, "commit": commit_hash}
+
+
+@mcp.tool()
+def list_repo_files(agent_id: Optional[int] = None) -> list[str]:
+    """List every file currently in the shared project repo."""
+    with get_session() as session:
+        _touch(session, agent_id)
+    return repo.list_files()
+
+
+@mcp.tool()
+def read_repo_file(path: str, agent_id: Optional[int] = None) -> str:
+    """Read a file from the shared project repo — check what a teammate
+    already built before writing something that conflicts with it."""
+    with get_session() as session:
+        _touch(session, agent_id)
+    try:
+        return repo.read_file(path)
+    except FileNotFoundError:
+        return f"(no such file: {path})"
+
+
+@mcp.tool()
+def repo_log(limit: int = 20, agent_id: Optional[int] = None) -> list[dict]:
+    """List recent commits to the shared project repo — who wrote what, in order."""
+    with get_session() as session:
+        _touch(session, agent_id)
+    return repo.log(limit)
+
+
 if __name__ == "__main__":
     init_db()
+    repo.ensure_repo()
     mcp.run(transport="streamable-http")

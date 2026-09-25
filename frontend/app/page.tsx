@@ -22,7 +22,15 @@ type Task = {
   owner_agent_id: number | null;
 };
 type Message = { id: number; agent_id: number | null; body: string; created_at: string };
-type State = { workspace: Workspace | null; agents: Agent[]; tasks: Task[]; messages: Message[] };
+type Commit = { hash: string; author: string; message: string; date: string };
+type Repo = { files: string[]; commits: Commit[] };
+type State = {
+  workspace: Workspace | null;
+  agents: Agent[];
+  tasks: Task[];
+  messages: Message[];
+  repo: Repo;
+};
 
 const COLUMNS: Task["status"][] = ["open", "claimed", "in_progress", "done"];
 const COLUMN_LABEL: Record<Task["status"], string> = {
@@ -72,10 +80,14 @@ function clockTime(iso: string): string {
 }
 
 export default function Dashboard() {
-  const [state, setState] = useState<State>({ workspace: null, agents: [], tasks: [], messages: [] });
+  const [state, setState] = useState<State>({
+    workspace: null, agents: [], tasks: [], messages: [], repo: { files: [], commits: [] },
+  });
   const [connected, setConnected] = useState(false);
   const [prdOpen, setPrdOpen] = useState(true);
   const [expandedAgent, setExpandedAgent] = useState<number | null>(null);
+  const [expandedFile, setExpandedFile] = useState<string | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
   const [, forceTick] = useState(0);
   const feedRef = useRef<HTMLDivElement>(null);
 
@@ -99,6 +111,18 @@ export default function Dashboard() {
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: "smooth" });
   }, [state.messages.length]);
+
+  useEffect(() => {
+    if (!expandedFile) {
+      setFileContent(null);
+      return;
+    }
+    setFileContent(null);
+    fetch(`${API_BASE}/api/repo/file?path=${encodeURIComponent(expandedFile)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => setFileContent(d.content))
+      .catch(() => setFileContent("(failed to load)"));
+  }, [expandedFile]);
 
   const agent = (id: number | null) => (id === null ? null : state.agents.find((a) => a.id === id) ?? null);
   const agentName = (id: number | null) => (id === null ? "system" : agent(id)?.display_name ?? `agent#${id}`);
@@ -143,10 +167,11 @@ export default function Dashboard() {
           <Stat label="agents" value={`${onlineCount}/${state.agents.length}`} />
           <Stat label="tasks" value={state.tasks.length} />
           <Stat label="messages" value={state.messages.length} />
+          <Stat label="commits" value={state.repo.commits.length} />
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_360px] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_300px_260px] gap-4">
         <section>
           <SectionHeading>Agents</SectionHeading>
           <ul className="space-y-2">
@@ -304,7 +329,56 @@ export default function Dashboard() {
             {state.messages.length === 0 && <div className="text-sm text-zinc-600">no messages yet</div>}
           </div>
         </section>
+
+        <section className="min-w-0">
+          <SectionHeading>Repo ({state.repo.files.length} files)</SectionHeading>
+          <div className="space-y-1 mb-4">
+            {state.repo.files.map((f) => (
+              <button
+                key={f}
+                onClick={() => setExpandedFile(f)}
+                className="block w-full text-left rounded px-2 py-1 text-xs font-mono text-zinc-300 hover:bg-zinc-800 truncate"
+              >
+                {f}
+              </button>
+            ))}
+            {state.repo.files.length === 0 && <div className="text-xs text-zinc-600 italic">no files yet</div>}
+          </div>
+          <div className="text-[10px] uppercase tracking-wide text-zinc-600 mb-1.5">Recent commits</div>
+          <div className="space-y-1.5 max-h-[40vh] overflow-y-auto pr-1">
+            {state.repo.commits.map((c) => (
+              <div key={c.hash} className="text-xs leading-snug">
+                <span className="font-mono text-zinc-600">{c.hash}</span>{" "}
+                <span className="text-zinc-300">{c.message}</span>
+                <div className="text-[10px] text-zinc-600">{c.author}</div>
+              </div>
+            ))}
+            {state.repo.commits.length === 0 && <div className="text-xs text-zinc-600 italic">no commits yet</div>}
+          </div>
+        </section>
       </div>
+
+      {expandedFile && (
+        <div
+          className="fixed inset-0 bg-black/70 flex items-center justify-center p-6 z-50"
+          onClick={() => setExpandedFile(null)}
+        >
+          <div
+            className="bg-zinc-900 border border-zinc-800 rounded-lg max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-zinc-800">
+              <span className="font-mono text-sm text-zinc-200">{expandedFile}</span>
+              <button onClick={() => setExpandedFile(null)} className="text-zinc-500 hover:text-zinc-200 text-sm">
+                close
+              </button>
+            </div>
+            <pre className="p-4 overflow-auto text-xs text-zinc-300 font-mono whitespace-pre-wrap">
+              {fileContent ?? "loading…"}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

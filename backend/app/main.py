@@ -5,11 +5,12 @@ import asyncio
 import json
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sse_starlette.sse import EventSourceResponse
 from sqlmodel import select
 
+from . import repo
 from .db import get_session, init_db
 from .models import Agent, Message, Task, Workspace
 
@@ -51,6 +52,7 @@ def _snapshot() -> dict:
             "agents": [_agent_dict(a) for a in agents],
             "tasks": [t.model_dump(mode="json") for t in tasks],
             "messages": [m.model_dump(mode="json") for m in msgs],
+            "repo": {"files": repo.list_files(), "commits": repo.log(20)},
         }
 
 
@@ -62,6 +64,14 @@ def health() -> dict:
 @app.get("/api/state")
 def state() -> dict:
     return _snapshot()
+
+
+@app.get("/api/repo/file")
+def repo_file(path: str) -> dict:
+    try:
+        return {"path": path, "content": repo.read_file(path)}
+    except (FileNotFoundError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.get("/stream")

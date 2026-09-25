@@ -1,4 +1,5 @@
 """Create the demo workspace with a sample PRD. Run once before demoing."""
+from app import repo
 from app.db import get_session, init_db
 from app.models import Workspace
 
@@ -17,4 +18,6 @@ if __name__ == "__main__":
     with get_session() as session:
         session.add(Workspace(name="URL Shortener Team", prd_text=PRD))
         session.commit()
-    print("Seeded workspace. Start the servers, then connect agents.")
+    repo.reset()
+    repo.write_and_commit("README.md", f"# URL Shortener Team\n\n{PRD}", "Agent Collab Platform", "Seed workspace repo")
+    print("Seeded workspace + reset repo. Start the servers, then connect agents.")

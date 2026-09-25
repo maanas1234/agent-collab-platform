@@ -4,3 +4,8 @@ sqlmodel
 sse-starlette
 mcp<2
 anthropic
+httpx
+
+# optional: local fallback for the typed action-decision step in jev.py
+# (used automatically if installed and TYPESAFE_API_KEY isn't set)
+# laya
